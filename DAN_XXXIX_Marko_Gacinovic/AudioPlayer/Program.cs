@@ -11,7 +11,15 @@ namespace AudioPlayer
 {
     class Program
     {
+        static readonly ManualResetEvent manual = new ManualResetEvent(false);
+
+        static readonly object locker = new object();
+
         static Dictionary<int, string> songs = new Dictionary<int, string>();
+
+        static Random rnd = new Random();
+
+        static int duration = 0;
 
         static void Main(string[] args)
         {
@@ -37,6 +45,10 @@ namespace AudioPlayer
                         break;
                     case "3":
                         PlaySong();
+                        lock (locker)
+                        {
+                            Monitor.Wait(locker);
+                        }
                         break;
                     case "4":
                         Environment.Exit(0);
@@ -132,7 +144,16 @@ namespace AudioPlayer
             {
                 Console.WriteLine("Wrong input, please try again.");
                 validNum = int.TryParse(Console.ReadLine(), out num);
-            }                      
+            }
+
+            Thread song = new Thread(() => PlayingSong(num));
+            Thread advert = new Thread(() => Advertisement());
+            song.Start();
+            advert.Start();
+        }
+
+        static void PlayingSong(int num)
+        {           
 
             if (songs.Keys.Contains(num))
             {
@@ -140,21 +161,62 @@ namespace AudioPlayer
                 string songName = splitSong[1];
                 TimeSpan songDuration = TimeSpan.Parse(splitSong[2]);
 
-                Console.WriteLine("{0} song starting at {1}", songName, DateTime.Now.ToString("HH:mm:ss tt"));
+                Console.WriteLine("{0} song starting at {1}", songName, DateTime.Now.ToString("HH:mm:ss tt"));                
 
-                int duration = songDuration.Seconds;
+                duration = songDuration.Seconds;
+
+                manual.Set();
 
                 do
                 {
                     Thread.Sleep(1000);
                     duration--;
                     Console.WriteLine("Song is still playing...");
-                } while (duration>0);                
+                } while (duration > 0);
+
+                manual.Reset();
+                
             }
             else
             {
                 Console.WriteLine("Song does not exist.");
                 return;
+            }
+        }
+
+        static void Advertisement()
+        {       
+
+            try
+            {
+                using (StreamReader sr = new StreamReader("../../Advertisements.txt"))
+                {
+                    string line;
+
+                    List<string> adverts = new List<string>();
+
+                    while ((line = sr.ReadLine()) != null)
+                    {
+                        adverts.Add(line);
+                    }
+
+                    manual.WaitOne();
+
+                    do
+                    {
+                        Thread.Sleep(200);
+                        Console.WriteLine(adverts[rnd.Next(0,5)]);
+                    } while (duration > 0);
+
+                    lock (locker)
+                    {
+                        Monitor.Pulse(locker);
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e.Message);
             }
         }
     }
